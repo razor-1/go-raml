@@ -41,9 +41,9 @@ func (ps Server) Generate(dir string) error {
 	}
 
 	// generate request body
-	if err := generateClassesFromBodies(getAllResources(ps.APIDef, true), dir); err != nil {
-		return err
-	}
+	// if err := generateClassesFromBodies(getAllResources(ps.APIDef, true), dir); err != nil {
+	// 	return err
+	// }
 
 	// python classes
 	if err := generateClasses(ps.APIDef.Types, dir); err != nil {

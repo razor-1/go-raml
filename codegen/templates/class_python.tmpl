@@ -1,11 +1,11 @@
-{{define "class_python"}}
+{{- define "class_python" -}}
 """
 Auto-generated class for {{.Name}}
 """
 {{range $k, $v := .Imports -}}
 {{$v}}
 {{end}}
-import event_serializer
+import client_support
 
 
 class {{.Name}}(object):
@@ -41,11 +41,11 @@ class {{.Name}}(object):
             {{- end }}
             try:
                 {{ if $val.IsList -}}
-                self.{{$val.Name}} = event_serializer.list_factory(val, datatypes)
+                self.{{$val.Name}} = client_support.list_factory(val, datatypes)
                 {{- else if $val.HasChildProperties -}}
-                self.{{$val.Name}} = event_serializer.dict_factory(val, objmap)
+                self.{{$val.Name}} = client_support.dict_factory(val, objmap)
                 {{- else -}}
-                self.{{$val.Name}} = event_serializer.val_factory(val, datatypes)
+                self.{{$val.Name}} = client_support.val_factory(val, datatypes)
                 {{- end }}
             except ValueError as err:
                 raise ValueError(create_error.format(cls=class_name, prop=property_name, val=val, err=err))
@@ -59,8 +59,9 @@ class {{.Name}}(object):
         return self.as_json(indent=4)
 
     def as_json(self, indent=0):
-        return event_serializer.to_json(self, indent=indent)
+        return client_support.to_json(self, indent=indent)
 
     def as_dict(self):
-        return event_serializer.to_dict(self)
-{{end}}
+        return client_support.to_dict(self)
+
+{{end -}}

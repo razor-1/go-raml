@@ -166,10 +166,6 @@ func (pf *field) setType(t string) {
 				Module: "datetime",
 				Name: "datetime",
 			},
-			pyimport {
-				Module: "datetime_utils",
-				Name: "timestamp_to_datetime",
-			},
 		}
 		// pf.Initializer = "timestamp_to_datetime"
 	case "object":
@@ -202,12 +198,10 @@ func (pf *field) setType(t string) {
 	case strings.HasSuffix(t, "[][]"): // bidimensional array
 		log.Info("validator has no support for bidimensional array, ignore it")
 	case strings.HasSuffix(t, "[]"): // array
-	// case pf.ramlType.IsArray():
 		pf.IsList = true
 		pf.setType(t[:len(t)-2])
 	case strings.HasSuffix(t, "{}"): // map
 		log.Info("validator has no support for map, ignore it")
-	// case pf.ramlType.IsUnion():
 	case strings.Index(t, "|") > 0:
 		// send the list of union types to the template
 		for _, ut := range strings.Split(t, "|") {

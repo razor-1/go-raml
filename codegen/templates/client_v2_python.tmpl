@@ -31,7 +31,7 @@ class {{ .Name }}Client(object):
     {{ .Name }}Client implements a basic client for {{ .Name }} based on requests
     """
     def __init__(self, url=SERVER_URL, user=None, password=None, timeout_ms=5000):
-        self.url = '{}/{}'.format(url, '{{ .ClientURI }}')
+        self.url = '{}{}'.format(url, '{{ .ClientURI }}')
         self.timeout = timeout_ms / 1000
         self.user = user
         self.password = password
@@ -68,13 +68,13 @@ class {{ .Name }}Client(object):
           {{- end }}
         """
         query_params = self._process_query(query)
-        headers = {'content-type': 'application/json'}
+        headers = {'content-type': '{{ .BodyMimeType }}'}
         req = requests.get(self.url, auth=(self.user, self.password), headers=headers, params=query_params, timeout=self.timeout)
 
         self._check_status_code(req)
 
         ctype = req.headers.get('content-type')
-        if ctype != 'application/json':
+        if ctype != '{{ .BodyMimeType }}':
             raise {{ .Name }}ClientUnsuccessfulResponse('Unsuccessful response: content-type is not json: {ctype}'.format(ctype=ctype))
 
         # we got something

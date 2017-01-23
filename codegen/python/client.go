@@ -77,6 +77,10 @@ func (c Client) Generate(dir string) error {
 	clientURI := ""
 	getMethodTypes := make(map[string]*raml.Method)
 	typeImportsMap := make(map[string]struct{})
+	bodyMimeType := "application/json"
+	if c.APIDef.MediaType != "" {
+		bodyMimeType = c.APIDef.MediaType
+	}
 	// strip all non-alphanumeric characters from the type name
 	re := regexp.MustCompile("[[:^alnum:]]+")
 	// see if there's a type param on any method of any resource matching one of the defined types in the raml document 
@@ -95,7 +99,6 @@ func (c Client) Generate(dir string) error {
 	// see if baseType is one of the types defined in this raml definition.
 	// iterate over all defined types and see if one matches a type from the resource
 	baseType := ""
-
 	queryParameters := make(map[string]string)
 	for typeName, _ := range c.APIDef.Types {
 		_, found := getMethodTypes[typeName]
@@ -106,7 +109,6 @@ func (c Client) Generate(dir string) error {
 			// handle query parameters
 			for qpName, qpNamedParameter := range getMethodTypes[typeName].QueryParameters {
 				queryParameters[qpName] = qpNamedParameter.Type
-				// typeImportsMap[qpNamedParameter.Type] = struct{}{}
 			}
 		}
 	}
@@ -125,6 +127,7 @@ func (c Client) Generate(dir string) error {
 		ClientURI string
 		BaseType string
 		QueryParameters map[string]string
+		BodyMimeType string
 	} {
 		c.Name,
 		typeImports,
@@ -133,6 +136,7 @@ func (c Client) Generate(dir string) error {
 		clientURI,
 		baseType,
 		queryParameters,
+		bodyMimeType,
 	}
 	if err := commons.GenerateFile(clientData, "./templates/client_v2_python.tmpl",
 		"client_python", filepath.Join(dir, clientName), false); err != nil {

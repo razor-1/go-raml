@@ -13,6 +13,21 @@ class {{.Name}}(object):
     auto-generated. don't touch.
     """
 
+    @staticmethod
+    def create({{.CreateParamString}}):
+        """
+        {{ range $key, $val := .Fields -}}
+        :type {{$val.Name}}: {{if $val.IsList}}list[{{$val.DataType}}]{{else}}{{$val.DataType}}{{end}}
+        {{ end -}}
+        :rtype: {{.Name}}
+        """
+
+        return {{.Name}}(
+        {{- range $key, $val := .Fields }}
+            {{$val.Name}}={{$val.Name}},
+        {{- end }}
+        )
+
     def __init__(self, json=None, **kwargs):
         if not json and not kwargs:
             raise ValueError('No data or kwargs present')
@@ -63,5 +78,4 @@ class {{.Name}}(object):
 
     def as_dict(self):
         return client_support.to_dict(self)
-
 {{end -}}

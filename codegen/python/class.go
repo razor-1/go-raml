@@ -3,8 +3,8 @@ package python
 import (
 	"path/filepath"
 	"sort"
-	// "fmt"
-	// "strings"
+	"fmt"
+	"strings"
 
 	// "github.com/chuckpreslar/inflect"
 
@@ -19,6 +19,7 @@ type class struct {
 	Description []string
 	Fields      map[string]field
 	Enum        *enum
+	CreateParamString string
 }
 
 type objectProperty struct {
@@ -34,7 +35,6 @@ func newClass(name string, T raml.Type, types map[string]raml.Type) class {
 		Name:        name,
 		Description: commons.ParseDescription(T.Description),
 		Fields:      map[string]field{},
-
 	}
 
 	typeHierarchy := getTypeHierarchy(name, T, types)
@@ -55,6 +55,36 @@ func newClass(name string, T raml.Type, types map[string]raml.Type) class {
 	
 		pc.Fields[field.Name] = field
 	}
+
+	// build the CreateParamString, used as part of the create() staticmethod
+	// which is a convenience initializer for the class
+	requiredFields := make([]string, 0)
+	optionalFields := make([]string, 0)
+	for fieldName, fieldVal := range pc.Fields {
+		if fieldVal.Required {
+			requiredFields = append(requiredFields, fieldName)
+		} else {
+			optionalFields = append(optionalFields, fmt.Sprintf("%s=None", fieldName))
+		}
+	}
+	// sort them so we have some stability in param order (important for requiredFields)
+	sort.Strings(requiredFields)
+	sort.Strings(optionalFields)
+	requiredString := strings.Join(requiredFields, ", ")
+	optionalString := strings.Join(optionalFields, ", ")
+
+	if len(requiredFields) > 0 && len(optionalFields) > 0 {
+		combinedString := []string{requiredString, optionalString}
+		pc.CreateParamString = strings.Join(combinedString, ", ")
+	} else {
+		if len(requiredFields) > 0 {
+			pc.CreateParamString = requiredString
+		} else if len(optionalFields) > 0 {
+			pc.CreateParamString = optionalString
+		}
+	}
+	
+
 	return pc
 }
 
@@ -144,27 +174,26 @@ func newClassFromType(T raml.Type, name string, types map[string]raml.Type) clas
 }
 
 // generate a python class file
-func (pc *class) generate(dir string) error {
+func (pc *class) generate(dir string) (error, []string) {
 	// generate enums
+	typeNames := make([]string, 0)
 	for _, f := range pc.Fields {
 		if f.Enum != nil {
-			// TODO if this enum is inherited from a parent class without changes, skip
-			// if pc.Name == "ClientError" {
-			// 	fmt.Println("calling enum generate for", pc.Name, f.Name)
-			// 	fmt.Printf("\n%+v\n", pc)
-			// }
+			typeNames = append(typeNames, f.Enum.Name)
 			if err := f.Enum.generate(dir); err != nil {
-				return err
+				return err, typeNames
 			}
 		}
 	}
 
 	if pc.Enum != nil {
-		return pc.Enum.generate(dir)
+		typeNames = append(typeNames, pc.Enum.Name)
+		return pc.Enum.generate(dir), typeNames
 	}
 
 	fileName := filepath.Join(dir, pc.Name+".py")
-	return commons.GenerateFile(pc, "./templates/class_python.tmpl", "class_python", fileName, false)
+	typeNames = append(typeNames, pc.Name)
+	return commons.GenerateFile(pc, "./templates/class_python.tmpl", "class_python", fileName, false), typeNames
 }
 
 func (pc *class) handleAdvancedType() {
@@ -239,12 +268,19 @@ func (pc class) Imports() []string {
 }
 
 // generate all python classes from an RAML document
-func generateClasses(types map[string]raml.Type, dir string) error {
+func generateClasses(types map[string]raml.Type, dir string) (error, []string) {
+	typeNames := make([]string, 0)
 	for k, t := range types {
+		// this is special; ignore it, Python has a native module for this
+		if k == "UUID" {
+			continue
+		}
 		pc := newClassFromType(t, k, types)
-		if err := pc.generate(dir); err != nil {
-			return err
+		err, types := pc.generate(dir)
+		typeNames = append(typeNames, types...)
+		if err != nil {
+			return err, typeNames
 		}
 	}
-	return nil
+	return nil, typeNames
 }

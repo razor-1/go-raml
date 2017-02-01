@@ -7,6 +7,7 @@ import (
 	"strings"
 	"regexp"
 	"time"
+	"path"
 
 	log "github.com/Sirupsen/logrus"
 
@@ -66,13 +67,46 @@ func PythonSafeSingleQuotedString(str string) string {
 
 // Generate generates python client library files
 func (c Client) Generate(dir string) error {
-	if err := generateClasses(c.APIDef.Types, dir); err != nil {
+	// use special Documentation nodes in RAML to get package metadata
+	packageName := ""
+	packageURL := ""
+	authorName := ""
+	authorEmail := ""
+	for _, ramlDoc := range c.APIDef.Documentation {
+		lowerTitle := strings.ToLower(ramlDoc.Title)
+		if strings.HasPrefix(lowerTitle, "data.") {
+			dataTitle := strings.SplitN(lowerTitle, ".", 2)[1]
+			switch dataTitle {
+			case "authorname":
+				authorName = ramlDoc.Content
+			case "authoremail":
+				authorEmail = ramlDoc.Content
+			case "homepage":
+				packageURL = ramlDoc.Content
+			case "python.package_name":
+				packageName = ramlDoc.Content
+			}
+		}
+	}
+
+	clientName := c.Name
+	classDir := dir
+	if packageName != "" {
+		classDir = path.Join(dir, packageName)
+		if err := commons.CheckCreateDir(classDir); err != nil {
+			return err
+		}
+		clientName = packageName
+	}
+	clientName += ".py"
+
+	err, typeNames := generateClasses(c.APIDef.Types, classDir)
+	if err != nil {
 		log.Errorf("failed to generate python classes:%v", err)
 		return err
 	}
 
 	// generate client itself
-	clientName := c.Name + "Client.py"
 	customResourceType := false
 	clientURI := ""
 	getMethodTypes := make(map[string]*raml.Method)
@@ -129,7 +163,7 @@ func (c Client) Generate(dir string) error {
 		QueryParameters map[string]string
 		BodyMimeType string
 	} {
-		c.Name,
+		baseType,
 		typeImports,
 		customResourceType,
 		c.BaseURI,
@@ -138,45 +172,28 @@ func (c Client) Generate(dir string) error {
 		queryParameters,
 		bodyMimeType,
 	}
+	clientModule := clientData.Name + "Client"
+	clientFilename := clientModule + ".py"
 	if err := commons.GenerateFile(clientData, "./templates/client_v2_python.tmpl",
-		"client_python", filepath.Join(dir, clientName), false); err != nil {
+		"client_python", filepath.Join(classDir, clientFilename), false); err != nil {
 		return err
-	}	
+	}
+
+	typeNames = append(typeNames, clientModule)
+	c.generateInitPy(classDir, typeNames)
 
 	// generate helper
 	if err := commons.GenerateFile(nil, "./templates/client_support_python.tmpl",
-		"client_support_python", filepath.Join(dir, "client_support.py"), false); err != nil {
+		"client_support_python", filepath.Join(classDir, "client_support.py"), false); err != nil {
 		return err
 	}
 
 	// generate setup.py
 	re = regexp.MustCompile("[[:space:]]")
-	packageName := strings.ToLower(re.ReplaceAllLiteralString(c.APIDef.Title, "_"))
 	re = regexp.MustCompile("^[^0-9]+")
 	now := time.Now().UTC()
 	packageVersion := fmt.Sprintf("%v.%v", re.ReplaceAllLiteralString(c.APIDef.Version, ""), now.Format("20060102.150405"))
 
-	// use special Documentation nodes in RAML to get author and package info
-	packageURL := ""
-	authorName := ""
-	authorEmail := ""
-	for _, ramlDoc := range c.APIDef.Documentation {
-		lowerTitle := strings.ToLower(ramlDoc.Title)
-		if strings.HasPrefix(lowerTitle, "data.") {
-			dataTitle := strings.Split(lowerTitle, ".")[1]
-			switch dataTitle {
-			case "authorname":
-				authorName = ramlDoc.Content
-				break
-			case "authoremail":
-				authorEmail = ramlDoc.Content
-				break
-			case "homepage":
-				packageURL = ramlDoc.Content
-				break
-			}
-		}
-	}
 
 	setupData := struct {
 		PackageName string
@@ -199,20 +216,6 @@ func (c Client) Generate(dir string) error {
 	}
 
 	return nil
-
-	// if err := c.generateServices(dir); err != nil {
-	// 	return err
-	// }
-
-	// if err := c.generateSecurity(dir); err != nil {
-	// 	return err
-	// }
-
-	// if err := c.generateInitPy(dir); err != nil {
-	// 	return err
-	// }
-	// // generate main client lib file
-	// return commons.GenerateFile(c, "./templates/client_python.tmpl", "client_python", filepath.Join(dir, "client.py"), true)
 }
 
 func (c Client) generateServices(dir string) error {
@@ -242,6 +245,17 @@ func (c Client) generateSecurity(dir string) error {
 	return nil
 }
 
+
+func (c Client) generateInitPy(dir string, typeNames []string) error {
+	filename := filepath.Join(dir, "__init__.py")
+	initData := struct {
+		PackageModules []string
+	} {
+		typeNames,
+	}
+	return commons.GenerateFile(initData, "./templates/client_initpy_python_v2.tmpl", "client_initpy_python_v2", filename, false)
+}
+/*
 func (c Client) generateInitPy(dir string) error {
 	type oauth2Client struct {
 		Name       string
@@ -269,3 +283,4 @@ func (c Client) generateInitPy(dir string) error {
 	filename := filepath.Join(dir, "__init__.py")
 	return commons.GenerateFile(ctx, "./templates/client_initpy_python.tmpl", "client_initpy_python", filename, false)
 }
+*/

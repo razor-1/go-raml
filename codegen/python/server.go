@@ -46,7 +46,7 @@ func (ps Server) Generate(dir string) error {
 	// }
 
 	// python classes
-	if err := generateClasses(ps.APIDef.Types, dir); err != nil {
+	if err, _ := generateClasses(ps.APIDef.Types, dir); err != nil {
 		log.Errorf("failed to generate python clased:%v", err)
 		return err
 	}

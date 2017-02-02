@@ -23,6 +23,7 @@ type field struct {
 	Required    bool 				// if the field itself is required
 	DataType    string 				// the python datatype (objmap) used in the template
 	HasChildProperties bool
+	RequiredChildProperties []string
 	Validators  string
 	Enum        *enum
 	isFormField bool
@@ -33,7 +34,19 @@ type field struct {
 	validators  map[string][]string // array of validators, only used to build `Validators` field
 }
 
-func newField(className string, T raml.Type, prop raml.Property, types map[string]raml.Type, childProperties []objectProperty, typeHierarchy []map[string]raml.Type) (field, error) {
+func newField(className string, T raml.Type, propName string, propInterface interface{},
+	types map[string]raml.Type, childProperties []objectProperty,
+	typeHierarchy []map[string]raml.Type) (field, error) {
+	
+	// if className == "ClientEvent" {
+	// 	// debug TODO remove
+	// 	fmt.Println(className, propName, propInterface)
+	// 	fmt.Println(childProperties)
+	// 	fmt.Println("----")
+	// }
+
+	prop := raml.ToProperty(propName, propInterface)
+
 	f := field {
 		Name:     prop.Name,
 		Required: prop.Required,
@@ -88,7 +101,42 @@ func newField(className string, T raml.Type, prop raml.Property, types map[strin
 
 	f.DataType, f.HasChildProperties = buildDataType(f, childProperties)
 
-	// fmt.Printf("\n%s.%s childprops:\n%+v\n", className, f.Name, childProperties)
+	// see if there are different required properties for this instance of a type vs. the type's main declaration
+	mainRequired := make([]string, 0)
+	childRequired := make([]string, 0)
+	if mainType, ok := types[f.Type]; ok {
+		switch thisProp := propInterface.(type) {
+			case map[interface{}]interface{}:
+				if myChildProperties, ok := thisProp["properties"].(map[interface{}]interface{}); ok {
+					for _, typeProp := range ChildProperties(mainType.Properties) {
+						if typeProp.Required {
+							mainRequired = append(mainRequired, typeProp.Name)
+						}
+					}
+
+					myChildPropertyMap := make(map[string]interface{})
+					for k, v := range myChildProperties {
+						if childPropName, ok := k.(string); ok {
+							myChildPropertyMap[childPropName] = v
+						}
+					}
+
+					for _, myProp := range ChildProperties(myChildPropertyMap) {
+						if myProp.Required {
+							childRequired = append(childRequired, myProp.Name)
+						}
+					}
+				}
+		}
+	}
+	if len(childRequired) > len(mainRequired) {
+		// some properties were made required and we need to validate them
+		// sort the lists so we can get only the fields that are required on this child
+		sort.Strings(childRequired)
+		sort.Strings(mainRequired)
+
+		f.RequiredChildProperties = childRequired[len(mainRequired):]
+	}
 
 	return f, nil
 }
@@ -123,7 +171,7 @@ func buildDataType(f field, childProperties []objectProperty) (string, bool) {
 		return f.Type, false
 	}
 
-	// we have a dict with child properties. build the datatype string
+	// we have a dict with child properties of type 'object'. build the datatype string
 	// fmt.Println("childprops for", f.Type, childProperties)
 	var datatypes []string
 	for _, objProp := range childProperties {

@@ -46,9 +46,10 @@ func newClass(name string, T raml.Type, types map[string]raml.Type) class {
 	}
 	properties := getTypeProperties(ramlTypes)
 
-	for k, v := range properties {
-		op := objectProperties(k, v)
-		field, err := newField(name, T, raml.ToProperty(k, v), types, op, typeHierarchy)
+	for propName, propInterface := range properties {
+		op := objectProperties(propName, propInterface)
+		// field, err := newField(name, T, raml.ToProperty(k, v), types, op, typeHierarchy)
+		field, err := newField(name, T, propName, propInterface, types, op, typeHierarchy)
 		if err != nil {
 			continue
 		}
@@ -83,7 +84,6 @@ func newClass(name string, T raml.Type, types map[string]raml.Type) class {
 			pc.CreateParamString = optionalString
 		}
 	}
-	
 
 	return pc
 }
@@ -120,22 +120,26 @@ func objectProperties(name string, p interface{}) []objectProperty {
 }
 
 
-// func childProperties(p interface{}) []raml.Property {
-// 	props := make([]raml.Property, 0)
+func ChildProperties(Properties map[string]interface{}) []raml.Property {
+	props := make([]raml.Property, 0)
 
-// 	switch prop := p.(type) {
-// 	case map[interface{}]interface{}:
-// 		for k, v := range prop {
-// 			if k == "properties" {
-// 				for propName, childProp := range v.(map[interface{}]interface{}) {
-// 					props = append(raml.ToProperty(propName.(string), childProp), property)
-// 				}
-// 			}
-// 		}
-// 	}
+	// switch prop := p.(type) {
+	// case map[interface{}]interface{}:
+		// for k, v := range prop {
+		// 	if k == "properties" {
+		// 		for propName, childProp := range v.(map[interface{}]interface{}) {
+		// 			props = append(props, raml.ToProperty(propName.(string), childProp))
+		// 		}
+		// 	}
+		// }
+	// }
 
-// 	return props
-// }
+	for propName, propInterface := range Properties {
+		props = append(props, raml.ToProperty(propName, propInterface))
+	}
+
+	return props
+}
 
 
 func getTypeHierarchy(name string, T raml.Type, types map[string]raml.Type) []map[string]raml.Type {

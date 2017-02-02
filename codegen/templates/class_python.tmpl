@@ -64,6 +64,14 @@ class {{.Name}}(object):
                 {{- end }}
             except ValueError as err:
                 raise ValueError(create_error.format(cls=class_name, prop=property_name, val=val, err=err))
+            {{- if $val.RequiredChildProperties }}
+            else:
+                {{- range $rcName := $val.RequiredChildProperties }}
+                if not getattr(self.{{$val.Name}}, '{{$rcName}}', None):
+                    child_prop_name = "{parent}.{child}".format(parent=property_name, child='{{$rcName}}')
+                    raise ValueError(required_error.format(cls=class_name, prop=child_prop_name))
+                {{- end -}}
+            {{ end -}}
         {{- if $val.Required }}
         else:
             raise ValueError(required_error.format(cls=class_name, prop=property_name))

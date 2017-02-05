@@ -1,0 +1,7 @@
+{{- define "client_initpy_python_v2" -}}
+
+{{ range $mod := .PackageModules}}
+from {{$mod}} import {{$mod}}
+{{- end}}
+
+{{end -}}

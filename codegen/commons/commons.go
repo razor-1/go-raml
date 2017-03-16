@@ -2,6 +2,7 @@ package commons
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"regexp"
@@ -9,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"text/template"
+	"time"
 
 	log "github.com/Sirupsen/logrus"
 
@@ -25,9 +27,6 @@ const (
 
 	// RespBodySuffix is suffix name for response body object
 	RespBodySuffix = "RespBody"
-
-	LangGo     = "go"
-	LangPython = "python"
 )
 
 // doNormalizeURI removes `{`, `}`, and `/` from an URI
@@ -181,6 +180,12 @@ func runGoFmt(filePath string) error {
 		return errors.New("go fmt failed")
 	}
 	return nil
+}
+
+func GeneratePkgVersion(apiVersion string) string {
+	re := regexp.MustCompile("^[^0-9]+")
+	now := time.Now().UTC()
+	return fmt.Sprintf("%v.%v", re.ReplaceAllLiteralString(apiVersion, ""), now.Format("20060102.150405"))
 }
 
 // normalize package name because not all characters can be used as package name

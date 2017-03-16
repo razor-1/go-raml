@@ -51,8 +51,8 @@ func (ps FlaskServer) Generate(dir string) error {
 	}
 
 	// python classes
-	if err := generateClasses(ps.APIDef.Types, dir); err != nil {
-		log.Errorf("failed to generate python clased:%v", err)
+	if err, typeNames := generateClasses(ps.APIDef.Types, dir); err != nil {
+		log.Errorf("failed to generate python clased:%v: types%v", err, typeNames)
 		return err
 	}
 

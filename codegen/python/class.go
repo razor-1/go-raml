@@ -1,6 +1,7 @@
 package python
 
 import (
+	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -13,31 +14,147 @@ import (
 
 // class defines a python class
 type class struct {
-	T           raml.Type
-	Name        string
-	Description []string
-	Fields      map[string]field
-	Enum        *enum
+	T                 raml.Type
+	Name              string
+	Description       []string
+	Fields            map[string]field
+	Enum              *enum
+	CreateParamString string
+}
+
+type objectProperty struct {
+	name            string
+	required        bool
+	datatype        string
+	childProperties []objectProperty
 }
 
 // create a python class representations
-func newClass(name, description string, properties map[string]interface{}) class {
+func newClass(name string, description string, properties map[string]interface{}) class {
 	pc := class{
 		Name:        name,
 		Description: commons.ParseDescription(description),
 		Fields:      map[string]field{},
 	}
 
-	// generate fields
-	for k, v := range properties {
-		field, err := newField(name, raml.ToProperty(k, v))
+	types := globAPIDef.Types
+	T := types[name]
+
+	typeHierarchy := getTypeHierarchy(name, T, types)
+	ramlTypes := make([]raml.Type, 0)
+	for _, v := range typeHierarchy {
+		for _, iv := range v {
+			ramlTypes = append(ramlTypes, iv)
+		}
+	}
+	properties = getTypeProperties(ramlTypes)
+
+	for propName, propInterface := range properties {
+		op := objectProperties(propName, propInterface)
+		// field, err := newField(name, T, raml.ToProperty(k, v), types, op, typeHierarchy)
+		field, err := newField(name, T, propName, propInterface, types, op, typeHierarchy)
 		if err != nil {
 			continue
 		}
-		pc.Fields[field.Name] = field
 
+		pc.Fields[field.Name] = field
 	}
+
+	// build the CreateParamString, used as part of the create() staticmethod
+	// which is a convenience initializer for the class
+	requiredFields := make([]string, 0)
+	optionalFields := make([]string, 0)
+	for fieldName, fieldVal := range pc.Fields {
+		if fieldVal.Required {
+			requiredFields = append(requiredFields, fieldName)
+		} else {
+			optionalFields = append(optionalFields, fmt.Sprintf("%s=None", fieldName))
+		}
+	}
+	// sort them so we have some stability in param order (important for requiredFields)
+	sort.Strings(requiredFields)
+	sort.Strings(optionalFields)
+	requiredString := strings.Join(requiredFields, ", ")
+	optionalString := strings.Join(optionalFields, ", ")
+
+	if len(requiredFields) > 0 && len(optionalFields) > 0 {
+		combinedString := []string{requiredString, optionalString}
+		pc.CreateParamString = strings.Join(combinedString, ", ")
+	} else {
+		if len(requiredFields) > 0 {
+			pc.CreateParamString = requiredString
+		} else if len(optionalFields) > 0 {
+			pc.CreateParamString = optionalString
+		}
+	}
+
 	return pc
+}
+
+func objectProperties(name string, p interface{}) []objectProperty {
+	props := make([]objectProperty, 0)
+
+	switch prop := p.(type) {
+	case map[interface{}]interface{}:
+		ramlProp := raml.ToProperty(name, p)
+		if ramlProp.Type == "object" {
+			for k, v := range prop {
+				switch k {
+				case "properties":
+					for propName, childProp := range v.(map[interface{}]interface{}) {
+						rProp := raml.ToProperty(propName.(string), childProp)
+						objprop := objectProperty{
+							name:     rProp.Name,
+							required: rProp.Required,
+							datatype: rProp.Type,
+						}
+						if rProp.Type == "object" {
+							objprop.childProperties = append(objprop.childProperties, objectProperties(propName.(string), childProp)...)
+						}
+						props = append(props, objprop)
+					}
+				}
+			}
+		}
+	}
+
+	return props
+}
+
+func ChildProperties(Properties map[string]interface{}) []raml.Property {
+	props := make([]raml.Property, 0)
+
+	for propName, propInterface := range Properties {
+		props = append(props, raml.ToProperty(propName, propInterface))
+	}
+
+	return props
+}
+
+func getTypeHierarchy(name string, T raml.Type, types map[string]raml.Type) []map[string]raml.Type {
+	typelist := []map[string]raml.Type{map[string]raml.Type{name: T}}
+
+	parentType, inherited := types[T.Type.(string)]
+	if inherited {
+		for _, pt := range getTypeHierarchy(T.Type.(string), parentType, types) {
+			typelist = append(typelist, pt)
+		}
+	}
+
+	return typelist
+}
+
+func getTypeProperties(typelist []raml.Type) map[string]interface{} {
+	// get a list of the types in the inheritance chain for T
+	// walk it from the top down and add the properties
+	properties := make(map[string]interface{})
+	for i := len(typelist) - 1; i >= 0; i-- {
+		for k, v := range typelist[i].Properties {
+			properties[k] = v
+		}
+	}
+
+	return properties
 }
 
 func newClassFromType(T raml.Type, name string) class {
@@ -48,26 +165,26 @@ func newClassFromType(T raml.Type, name string) class {
 }
 
 // generate a python class file
-func (pc *class) generate(dir string) error {
+func (pc *class) generate(dir string) (error, []string) {
 	// generate enums
+	typeNames := make([]string, 0)
 	for _, f := range pc.Fields {
 		if f.Enum != nil {
+			typeNames = append(typeNames, f.Enum.Name)
 			if err := f.Enum.generate(dir); err != nil {
-				return err
+				return err, typeNames
 			}
 		}
 	}
 
 	if pc.Enum != nil {
-		return pc.Enum.generate(dir)
+		typeNames = append(typeNames, pc.Enum.Name)
+		return pc.Enum.generate(dir), typeNames
 	}
 
 	fileName := filepath.Join(dir, pc.Name+".py")
-	return commons.GenerateFile(pc, "./templates/class_python.tmpl", "class_python", fileName, false)
-}
-
-func (pc *class) EmptyField() bool {
-	return len(pc.Fields) == 0
+	typeNames = append(typeNames, pc.Name)
+	return commons.GenerateFile(pc, "./templates/class_python.tmpl", "class_python", fileName, false), typeNames
 }
 
 func (pc *class) handleAdvancedType() {
@@ -102,7 +219,7 @@ func generateClassesFromMethod(m serverMethod, dir string) error {
 	if commons.HasJSONBody(&m.Bodies) {
 		name := inflect.UpperCamelCase(m.MethodName + "ReqBody")
 		class := newClass(name, "", m.Bodies.ApplicationJSON.Properties)
-		if err := class.generate(dir); err != nil {
+		if err, _ := class.generate(dir); err != nil {
 			return err
 		}
 	}
@@ -111,29 +228,37 @@ func generateClassesFromMethod(m serverMethod, dir string) error {
 
 // return list of import statements
 func (pc class) Imports() []string {
-	var imports []string
+	// var imports []string
+	imports := make(map[string]bool)
 
-	for _, v := range pc.Fields {
-		if v.isFormField {
-			if strings.Index(v.ramlType, ".") > 1 { // it is a library
-				importPath, name := libImportPath(v.ramlType, "")
-				imports = append(imports, "from "+importPath+" import "+name)
-			} else {
-				imports = append(imports, "from "+v.Type+" import "+v.Type)
-			}
+	for _, field := range pc.Fields {
+		for _, imp := range field.imports {
+			importString := "from " + imp.Module + " import " + imp.Name
+			imports[importString] = true
 		}
 	}
-	sort.Strings(imports)
-	return imports
+	var importStrings []string
+	for key := range imports {
+		importStrings = append(importStrings, key)
+	}
+	sort.Strings(importStrings)
+	return importStrings
 }
 
 // generate all python classes from an RAML document
-func generateClasses(types map[string]raml.Type, dir string) error {
+func generateClasses(types map[string]raml.Type, dir string) (error, []string) {
+	typeNames := make([]string, 0)
 	for k, t := range types {
+		// this is special; ignore it, Python has a native module for this
+		if k == "UUID" {
+			continue
+		}
 		pc := newClassFromType(t, k)
-		if err := pc.generate(dir); err != nil {
-			return err
+		err, types := pc.generate(dir)
+		typeNames = append(typeNames, types...)
+		if err != nil {
+			return err, typeNames
 		}
 	}
-	return nil
+	return nil, typeNames
 }

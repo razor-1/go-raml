@@ -1,7 +1,8 @@
 {{- define "enum_python" -}}
-from enum import Enum
+from enum import Enum, unique
 
 
+@unique
 class {{.Name}}(Enum):
 	{{- range $k, $v := .Fields}}
     {{$v.Name}} = {{$v.Value}}{{end}}

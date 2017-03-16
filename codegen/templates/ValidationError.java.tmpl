@@ -1,0 +1,26 @@
+{{- define "validation_error_java" -}}
+package {{.PackageName}};
+
+import java.util.List;
+import java.util.ArrayList;
+
+public class ValidationError {
+    private List<String> errors = new ArrayList<String>();
+
+    public void addError(String message) {
+        errors.add(message);
+    }
+
+    public void addValidationErrors(ValidationError moreErrors) {
+        errors.addAll(moreErrors.getErrors());
+    }
+
+    public boolean hasErrors() {
+        return ! errors.isEmpty();
+    }
+
+    public List<String> getErrors() {
+        return this.errors;
+    }
+}
+{{- end -}}

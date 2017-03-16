@@ -146,6 +146,16 @@ func main() {
 					Usage:       "Kind of client to generate (requests,aiohttp)",
 					Destination: &clientCommand.Kind,
 				},
+				cli.StringFlag{
+					Name:        "version",
+					Usage:       "package version string",
+					Destination: &clientCommand.PackageVersion,
+				},
+				cli.StringFlag{
+					Name:        "java-annotations",
+					Usage:       "jackson or gson",
+					Destination: &clientCommand.JavaAnnotations,
+				},
 			},
 			Action: func(c *cli.Context) {
 				if err := clientCommand.Execute(); err != nil {

@@ -1,0 +1,54 @@
+{{- define "deserializer_jackson_java" -}}
+{{- $className := .Name -}}
+
+package {{.PackageName}};
+/*
+Auto-generated custom Jackson deserializer class for {{$className}}
+*/
+
+import java.io.IOException;
+
+import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.core.*;
+import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+
+
+public class {{$className}}Deserializer extends StdDeserializer<{{$className}}> { 
+ 
+    public {{$className}}Deserializer() { 
+        this(null); 
+    } 
+ 
+    public {{$className}}Deserializer(Class<?> vc) { 
+        super(vc); 
+    }
+ 
+    @Override
+    public {{$className}} deserialize(JsonParser jp, DeserializationContext ctxt) 
+      throws IOException, JsonProcessingException {
+        ObjectMapper mapper = (ObjectMapper) jp.getCodec();
+        ObjectNode root = (ObjectNode) mapper.readTree(jp);
+
+        Class<? extends {{$className}}> deserClass = null;
+
+        // N.B. use the "name" property to disambiguate amongst child classes
+        String name = root.get("name").asText();
+
+        // see which {{$className}} sublcass this is based on the name property. try each of them looking for a match
+        {{ range $childClass := .ChildClasses }}
+        try {
+            {{$childClass}}.Name.fromValue(name);
+            deserClass = {{$childClass}}.class;
+        } catch (IllegalArgumentException e) { }
+        {{- end}}
+
+        if (deserClass == null) {
+            // not a valid event name
+            throw new JsonParseException(jp, name + " is not a valid name. {{$className}}Deserializer was unsuccessful.");
+        }
+
+        return mapper.treeToValue(root, deserClass);
+    }
+}
+{{end -}}

@@ -1,16 +1,89 @@
-{{define "class_python"}}
-from flask_wtf import Form
-from wtforms.validators import DataRequired, Length, Regexp, NumberRange, required
-from wtforms import TextField, FormField, IntegerField, FloatField, FileField, BooleanField, DateField, FieldList
-from input_validators import multiple_of
-
+{{- define "class_python" -}}
+"""
+Auto-generated class for {{.Name}}
+"""
 {{range $k, $v := .Imports -}}
 {{$v}}
-{{ end}}
-
-class {{.Name}}(Form):
-    {{ range $key, $val := .Fields}}
-    {{$val.Name}} = {{$val.WTFType}}
-    {{- end }}
-	{{- if .EmptyField}}pass{{end}}
 {{end}}
+from . import client_support
+
+
+class {{.Name}}(object):
+    """
+    auto-generated. don't touch.
+    """
+
+    @staticmethod
+    def create({{.CreateParamString}}):
+        """
+        {{ range $key, $val := .Fields -}}
+        :type {{$val.Name}}: {{if $val.IsList}}list[{{$val.DataType}}]{{else}}{{$val.DataType}}{{end}}
+        {{ end -}}
+        :rtype: {{.Name}}
+        """
+
+        return {{.Name}}(
+        {{- range $key, $val := .Fields }}
+            {{$val.Name}}={{$val.Name}},
+        {{- end }}
+        )
+
+    def __init__(self, json=None, **kwargs):
+        if not json and not kwargs:
+            raise ValueError('No data or kwargs present')
+
+        class_name = '{{.Name}}'
+        create_error = '{cls}: unable to create {prop} from value: {val}: {err}'
+        required_error = '{cls}: missing required property {prop}'
+
+        data = json or kwargs
+        
+        {{- range $key, $val := .Fields}}
+
+        property_name = '{{$val.Name}}'
+        val = data.get(property_name)
+        if val is not None:
+            {{ if $val.HasChildProperties -}}
+            # objmap is a dict outlining the structure of this value (or its memebers if it's a list)
+            # its format is {'attrname': {'datatype': [type], 'required': bool}}
+            # the type values in the 'datatype' list can be any type, but if they are a dict, it's assumed to be in objmap format
+            # (thus describing sub-properties of this object)
+            objmap = {
+                {{$val.DataType}}
+            }
+            {{- else -}}
+            datatypes = [{{$val.DataType}}]
+            {{- end }}
+            try:
+                {{ if $val.IsList -}}
+                self.{{$val.Name}} = client_support.list_factory(val, datatypes)
+                {{- else if $val.HasChildProperties -}}
+                self.{{$val.Name}} = client_support.dict_factory(val, objmap)
+                {{- else -}}
+                self.{{$val.Name}} = client_support.val_factory(val, datatypes)
+                {{- end }}
+            except ValueError as err:
+                raise ValueError(create_error.format(cls=class_name, prop=property_name, val=val, err=err))
+            {{- if $val.RequiredChildProperties }}
+            else:
+                {{- range $rcName := $val.RequiredChildProperties }}
+                if not getattr(self.{{$val.Name}}, '{{$rcName}}', None):
+                    child_prop_name = "{parent}.{child}".format(parent=property_name, child='{{$rcName}}')
+                    raise ValueError(required_error.format(cls=class_name, prop=child_prop_name))
+                {{- end -}}
+            {{ end -}}
+        {{- if $val.Required }}
+        else:
+            raise ValueError(required_error.format(cls=class_name, prop=property_name))
+        {{- end }}
+    {{- end }}
+
+    def __str__(self):
+        return self.as_json(indent=4)
+
+    def as_json(self, indent=0):
+        return client_support.to_json(self, indent=indent)
+
+    def as_dict(self):
+        return client_support.to_dict(self)
+{{end -}}

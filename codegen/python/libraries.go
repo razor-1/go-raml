@@ -64,8 +64,8 @@ func (l *library) generate() error {
 	}
 
 	// python classes
-	if err := generateClasses(l.Types, l.dir); err != nil {
-		log.Errorf("failed to generate python clased:%v", err)
+	if err, typeNames := generateClasses(l.Types, l.dir); err != nil {
+		log.Errorf("failed to generate python class:%v types:%v", err, typeNames)
 		return err
 	}
 

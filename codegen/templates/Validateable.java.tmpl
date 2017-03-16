@@ -1,0 +1,12 @@
+{{- define "validateable_java" -}}
+package {{.PackageName}};
+
+import java.time.Instant;
+
+public interface Validateable {
+    public ValidationError validate();
+
+    // sanity check - dates should always be later than this
+    static final Instant minInstant = Instant.parse("2016-12-05T00:00:00Z");
+}
+{{- end -}}

@@ -1,0 +1,23 @@
+{{- define "setup_python" -}}
+
+import sys
+from setuptools import setup
+
+setup(
+    name='{{ .PackageName }}',
+    version='{{ .PackageVersion }}',
+    description='{{ .PackageDesc }}',
+    url='{{ .PackageURL }}',
+    author='{{ .AuthorName }}',
+    author_email='{{ .AuthorEmail }}',
+    packages=['{{ .PackageName }}'],
+    install_requires=['requests'],
+    extras_require={
+        ':python_version<"3.4"': ['enum34'],
+    },
+    test_suite='nose.collector',
+    tests_require=['nose'],
+    zip_safe=False
+)
+
+{{end -}}

@@ -1,0 +1,166 @@
+{{- define "class_java" -}}
+{{- $className := .Name -}}
+
+package {{.PackageName}};
+/*
+Auto-generated class for {{.Name}}
+*/
+{{ range $k, $v := .Imports -}}
+import {{$v}};
+{{ end }}
+
+{{ if .Jackson }}@JsonInclude(JsonInclude.Include.NON_EMPTY)
+{{ if .Deserializer }}@JsonDeserialize({{if .HasParentType}}as{{else}}using{{end}} = {{.Deserializer}}.class){{ end -}}
+{{ end }}
+public{{ if .AbstractType }} abstract{{ end }} class {{$className}} {{ if .HasParentType }}extends {{.ParentType}}<{{$className}}>{{ else }}{{ if .HasChildType }}<T extends {{$className}}<T>> {{end}}implements Validateable{{ end }} {
+
+    public ValidationError validate() {
+        ValidationError ve = {{ if .HasParentType }}super.validate(){{ else }}new ValidationError(){{ end }};
+
+        {{ range $key, $field := .Fields -}}
+        {{- if $field.Required -}}
+        if (this.get{{$field.CamelCaseName}}() == null) {
+            ve.addError("{{$className}}: missing required property {{$field.Name}}");
+        }
+        else {
+            {{ if $field.CustomType -}}
+            ve.addValidationErrors(this.get{{$field.CamelCaseName}}().validate());
+            {{- end -}}
+            {{ if eq $field.Type "Instant" -}}
+            if (this.get{{$field.CamelCaseName}}().isBefore(Validateable.minInstant)) {
+                ve.addError("{{$className}}: invalid Instant value (too old) for datetime property {{$field.Name}}");
+            }
+            {{- end -}}
+            {{- if eq $field.Type "String" -}}
+            if (this.get{{$field.CamelCaseName}}().isEmpty()) {
+                ve.addError("{{$className}}: invalid empty value for string property {{$field.Name}}");
+            }
+            {{- end }}
+            {{ range $requiredChildProperty := $field.RequiredChildProperties -}}
+            if (this.get{{$field.CamelCaseName}}().get{{$requiredChildProperty}}() == null) {
+                ve.addError("{{$className}}: missing required property {{$field.Name}}.{{$requiredChildProperty}}");
+            }
+            {{ end }}
+        }
+        {{ end }}
+        {{- end -}}
+
+        return ve;
+    }
+
+    // define the members
+    {{ range $key, $field := .Fields -}}
+    {{- if $field.IsMember }}
+    {{ range $annotation := $field.Annotations }}
+    {{ $annotation }}
+    {{- end }}
+    private {{$field.Type}} {{$field.Name}};
+    {{- end }}
+    {{- end }}
+
+    public {{if .AbstractType}}abstract {{end}}static class Builder{{if .AbstractType}}<T extends Builder<T>>{{end}}{{if .HasParentType}} extends {{.ParentType}}.Builder<Builder>{{end}} {
+        {{ range $key, $field := .Fields -}}
+        {{- if .IsMember -}}
+        private {{$field.Type}} {{$field.Name}};
+        {{ end -}}
+        {{- end -}}
+        {{ if .AbstractType }}protected abstract T getThis();{{end -}}
+        {{- if .HasParentType }}protected Builder getThis() { return this; }{{end -}}
+        {{ range $key, $field := .Fields -}}
+        {{- if .IsMember }}
+
+        public {{if $.AbstractType}}T{{else}}Builder{{end}} {{$field.Name}}({{$field.Type}} {{$field.Name}}) {
+            this.{{$field.Name}} = {{$field.Name}};
+            return {{if or $.AbstractType $.HasParentType}}getThis(){{else}}this{{end}};
+        }
+        {{- end }}
+        {{- end }}
+
+        {{- if not .AbstractType }}
+
+        public {{$className}} build() {{if .HasRequiredProperties}}throws ValidationException{{end}} {
+            {{$className}} this{{$className}} = new {{$className}}(this);
+            {{if .HasRequiredProperties -}}
+            ValidationError ve = this{{$className}}.validate();
+            if (ve.hasErrors()) {
+                throw new ValidationException("{{$className}} did not validate", ve);
+            }
+            {{- end }}
+            return this{{$className}};
+        }
+        {{- end }}
+    }
+
+    {{ if not .AbstractType -}}
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    private {{$className}}() { }
+
+    private {{$className}}(Builder b) {
+        {{- if .HasParentType }}
+        super(b);
+        {{ end -}}
+        {{ range $key, $field := .Fields -}}
+        {{ if .IsMember -}}
+        this.{{$field.Name}} = b.{{$field.Name}};
+        {{- end}}
+        {{ end }}
+    }
+    {{ else -}}
+    protected {{$className}}() { }
+
+    protected {{$className}}(Builder b) {
+        {{ range $key, $field := .Fields -}}
+        {{ if .IsMember -}}
+        this.{{$field.Name}} = b.{{$field.Name}};
+        {{- end}}
+        {{ end }}
+    }
+    {{- end }}
+
+    {{ range $key, $field := .Fields -}}
+    {{- if $field.Enum }}
+    public enum {{$field.CamelCaseName}} {
+        {{ range $idx, $enumfield := $field.Enum.Fields }}
+        {{ if $field.Enum.AnnotationGSON }}@SerializedName({{$enumfield.Value}})
+        {{end -}}
+        {{$enumfield.Name}}({{$enumfield.Value}}){{if eq $field.Enum.LastFieldIdx $idx}};{{else}},{{end}}
+        {{- end }}
+        private final String value;
+        private final static Map<String, {{$className}}.{{$field.CamelCaseName}}> CONSTANTS = new HashMap<String, {{$className}}.{{$field.CamelCaseName}}>();
+
+        static {
+            for ({{$className}}.{{$field.CamelCaseName}} c: values()) { CONSTANTS.put(c.value, c); }
+        }
+
+        private {{$field.CamelCaseName}}(String value) { this.value = value; }
+
+        @Override
+        public String toString() { return this.value; }
+
+        {{ if $.Jackson }}@JsonValue{{end }}
+        public String value() { return this.value; }
+
+        {{ if $.Jackson }}@JsonCreator{{end }}
+        public static {{$className}}.{{$field.CamelCaseName}} fromValue(String value) {
+            {{$className}}.{{$field.CamelCaseName}} constant = CONSTANTS.get(value);
+            if (constant == null) {
+                throw new IllegalArgumentException(value);
+            } else {
+                return constant;
+            }
+        }
+
+    }
+
+    {{- end }}
+    {{ if .IsMember -}}
+    public {{$field.Type}} get{{$field.CamelCaseName}}() { return {{$field.Name}}; }
+
+    public void set{{$field.CamelCaseName}}({{$field.Type}} {{$field.Name}}) { this.{{$field.Name}} = {{$field.Name}}; }
+    {{- end}}
+    {{ end }}
+}
+{{end -}}

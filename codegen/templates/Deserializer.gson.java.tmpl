@@ -1,0 +1,44 @@
+{{- define "deserializer_gson_java" -}}
+{{- $className := .Name -}}
+
+package {{.PackageName}};
+
+/*
+Auto-generated custom GSON deserializer class for {{$className}}
+*/
+
+import java.lang.reflect.Type;
+import com.google.gson.JsonDeserializationContext;
+import com.google.gson.JsonDeserializer;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
+
+
+public class {{$className}}Deserializer implements JsonDeserializer<{{$className}}> {
+
+  @Override
+  public {{$className}} deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context)
+        throws JsonParseException {
+    
+    String name = json.getAsJsonObject().get("name").getAsString();
+    Class<? extends {{$className}}> deserClass = null;
+
+    // see which {{$className}} sublcass this is based on the name
+    {{ range $childClass := .ChildClasses }}
+    try {
+      {{$childClass}}.Name.fromValue(name);
+      deserClass = {{$childClass}}.class;
+    } catch (IllegalArgumentException e) { }
+    {{- end}}
+
+    if (deserClass == null) {
+      // not a valid event name
+      throw new JsonParseException(name + " is not a valid event name");
+    }
+
+    return context.deserialize(json, deserClass);
+  }
+
+}
+{{end -}}

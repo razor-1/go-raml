@@ -106,6 +106,7 @@ type Property struct {
 	Required    bool        `yaml:"required"`
 	Enum        interface{} `yaml:"enum"`
 	Description string      `yaml:"description"`
+	Properties  []Property  `yaml:"properties"`
 
 	// string
 	Pattern   *string
@@ -186,6 +187,12 @@ func ToProperty(name string, p interface{}) Property {
 				p.CapnpFieldNumber = v.(int)
 			case "capnpType":
 				p.CapnpType = v.(string)
+			case "properties":
+				childProps := make([]Property, 0)
+				for cpName, cpInterface := range v.(map[interface{}]interface{}) {
+					childProps = append(childProps, ToProperty(cpName.(string), cpInterface))
+				}
+				p.Properties = childProps
 			}
 		}
 		return p
